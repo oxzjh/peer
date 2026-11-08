@@ -16,6 +16,7 @@ var (
 	HeartbeatInterval = time.Minute
 	HeartbeatMessage  = []byte("{\"method\":\"heartbeat\"}")
 	ConnectTimeout    = 30 * time.Second
+	ConnectOrdered    = true
 	CallTimeout       = time.Minute
 )
 
@@ -44,22 +45,21 @@ type packet struct {
 }
 
 type Peer struct {
-	sockMu    sync.Mutex
-	connMu    sync.RWMutex
-	conn      *websocket.Conn
 	conf      *webrtc.Configuration
+	ws        *websocket.Conn
+	wsMu      sync.Mutex
 	conns     map[string]IConn
-	onConn    func(*DataConn)
-	onCall    func(*MediaConn, any) error
+	connMu    sync.RWMutex
 	onOnlines func([]uint64)
 	onError   func(error)
-	onClose   func()
+	onClosed  func()
+	onConn    func(*DataConn)
+	onCall    func(*MediaConn, any) error
 }
 
 func (p *Peer) start() {
 	p.scheduleHeartbeat()
 	go p.read()
-	go p.tick()
 }
 
 func (p *Peer) scheduleHeartbeat() {
@@ -67,18 +67,18 @@ func (p *Peer) scheduleHeartbeat() {
 }
 
 func (p *Peer) sendHeartbeat() {
-	p.sockMu.Lock()
-	err := p.conn.WriteMessage(websocket.BinaryMessage, HeartbeatMessage)
-	p.sockMu.Unlock()
+	p.wsMu.Lock()
+	err := p.ws.WriteMessage(websocket.BinaryMessage, HeartbeatMessage)
+	p.wsMu.Unlock()
 	if err == nil {
 		p.scheduleHeartbeat()
 	}
 }
 
 func (p *Peer) send(method string, data any) error {
-	p.sockMu.Lock()
-	defer p.sockMu.Unlock()
-	return p.conn.WriteJSON(&request{method, data})
+	p.wsMu.Lock()
+	defer p.wsMu.Unlock()
+	return p.ws.WriteJSON(&request{method, data})
 }
 
 func (p *Peer) sendto(uid uint64, sign string, packet *packet) error {
@@ -121,9 +121,9 @@ func (p *Peer) onOffer(c IConn, uid uint64, sign, id string, offer *webrtc.Sessi
 func (p *Peer) read() {
 	for {
 		var resp response
-		if err := p.conn.ReadJSON(&resp); err != nil {
-			if p.onClose != nil {
-				p.onClose()
+		if err := p.ws.ReadJSON(&resp); err != nil {
+			if p.onClosed != nil {
+				p.onClosed()
 			}
 			return
 		}
@@ -151,7 +151,7 @@ func (p *Peer) onRecvfrom(d *data) {
 		if d.Packet.Media == nil {
 			if p.onConn != nil {
 				var conn *DataConn
-				if conn, err = p.newDataConn(d.Uid, d.Sign, d.Packet.ID, true); err == nil {
+				if conn, err = p.newDataConn(d.Uid, d.Sign, d.Packet.ID); err == nil {
 					p.onConn(conn)
 					err = p.onOffer(conn, d.Uid, d.Sign, d.Packet.ID, d.Packet.SDP)
 				}
@@ -184,6 +184,12 @@ func (p *Peer) addConn(id string, conn IConn) {
 	p.connMu.Unlock()
 }
 
+func (p *Peer) delConn(id string) {
+	p.connMu.Lock()
+	delete(p.conns, id)
+	p.connMu.Unlock()
+}
+
 func (p *Peer) getConn(id string) IConn {
 	p.connMu.RLock()
 	conn := p.conns[id]
@@ -191,51 +197,49 @@ func (p *Peer) getConn(id string) IConn {
 	return conn
 }
 
-func (p *Peer) tick() {
-	for t := range time.Tick(time.Second) {
-		p.connMu.Lock()
-		for id, conn := range p.conns {
-			if conn.isConnected() || conn.isClosed() || conn.isTimeout(t) {
-				delete(p.conns, id)
-			}
-		}
-		p.connMu.Unlock()
-	}
-}
-
-func (p *Peer) newDataConn(uid uint64, sign, id string, orderd bool) (*DataConn, error) {
+func (p *Peer) newDataConn(uid uint64, sign, id string) (*DataConn, error) {
 	dc := &DataConn{}
-	dc.timeout = time.Now().Add(ConnectTimeout)
-	conn, err := rtc.NewDataConnection(p.conf, func(candidate *webrtc.ICECandidateInit) {
+	d, err := rtc.NewData(p.conf, func(candidate *webrtc.ICECandidateInit) {
 		p.sendCandidate(uid, sign, id, candidate)
-	}, orderd, dc.onData)
+	}, dc.onData, rtc.WithOrdered(ConnectOrdered), rtc.WithTimeout(ConnectTimeout), rtc.WithOnConnected(func() {
+		p.delConn(id)
+	}), rtc.WithOnTimeout(func() {
+		p.delConn(id)
+	}), rtc.WithOnClosed(func() {
+		dc.closed = true
+		p.delConn(id)
+	}))
 	if err != nil {
 		return nil, err
 	}
-	conn.OnConnectionStateChange(dc.onConnectionStateChange)
-	dc.DataConnection = conn
+	dc.Data = d
 	p.addConn(id, dc)
 	return dc, nil
 }
 
 func (p *Peer) newMediaConn(uid uint64, sign, id string) (*MediaConn, error) {
 	mc := &MediaConn{}
-	mc.timeout = time.Now().Add(CallTimeout)
-	conn, err := rtc.NewMediaConnection(p.conf, func(candidate *webrtc.ICECandidateInit) {
+	m, err := rtc.NewMedia(p.conf, func(candidate *webrtc.ICECandidateInit) {
 		p.sendCandidate(uid, sign, id, candidate)
-	})
+	}, rtc.WithTimeout(CallTimeout), rtc.WithOnConnected(func() {
+		p.delConn(id)
+	}), rtc.WithOnTimeout(func() {
+		p.delConn(id)
+	}), rtc.WithOnClosed(func() {
+		mc.closed = true
+		p.delConn(id)
+	}))
 	if err != nil {
 		return nil, err
 	}
-	conn.OnConnectionStateChange(mc.onConnectionStateChange)
-	mc.MediaConnection = conn
+	mc.Media = m
 	p.addConn(id, mc)
 	return mc, nil
 }
 
-func (p *Peer) Connect(uid uint64, sign string, ordered bool) (*DataConn, error) {
+func (p *Peer) Connect(uid uint64, sign string) (*DataConn, error) {
 	id := uuid.NewString()
-	dc, err := p.newDataConn(uid, sign, id, ordered)
+	dc, err := p.newDataConn(uid, sign, id)
 	if err != nil {
 		return nil, err
 	}
@@ -262,40 +266,20 @@ func (p *Peer) Call(uid uint64, sign string, media any) (*MediaConn, error) {
 	return mc, nil
 }
 
-func (p *Peer) OnConn(f func(*DataConn)) {
-	p.onConn = f
-}
-
-func (p *Peer) OnCall(f func(*MediaConn, any) error) {
-	p.onCall = f
-}
-
 func (p *Peer) QueryOnlines(uids []uint64) error {
 	return p.send("onlines", map[string]any{"uids": uids})
 }
 
-func (p *Peer) OnOnlines(f func([]uint64)) {
-	p.onOnlines = f
-}
-
-func (p *Peer) OnError(f func(error)) {
-	p.onError = f
-}
-
-func (p *Peer) OnClose(f func()) {
-	p.onClose = f
-}
-
 func (p *Peer) Close() error {
-	return p.conn.Close()
+	return p.ws.Close()
 }
 
 func New(url string, conf *webrtc.Configuration) (*Peer, error) {
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}
-	peer := &Peer{conn: conn, conf: conf, conns: make(map[string]IConn)}
-	peer.start()
-	return peer, nil
+	p := &Peer{conf: conf, ws: ws, conns: make(map[string]IConn)}
+	p.start()
+	return p, nil
 }

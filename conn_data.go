@@ -7,11 +7,11 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-var ErrConnctionClosed = errors.New("send message with closed connection")
+var ErrPeerConnectionClosed = errors.New("peer connection closed")
 
 type DataConn struct {
-	connection
-	*rtc.DataConnection
+	*rtc.Data
+	closed    bool
 	dc        *webrtc.DataChannel
 	onOpen    func()
 	onMessage func([]byte)
@@ -79,7 +79,7 @@ func (c *DataConn) checkState() error {
 			c.onClose()
 		}
 		c.dc.Close()
-		return ErrConnctionClosed
+		return ErrPeerConnectionClosed
 	}
 	return nil
 }
