@@ -274,12 +274,15 @@ func (p *Peer) Close() error {
 	return p.ws.Close()
 }
 
-func New(url string, conf *webrtc.Configuration) (*Peer, error) {
+func New(url string, conf *webrtc.Configuration, opts ...Option) (*Peer, error) {
 	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}
 	p := &Peer{conf: conf, ws: ws, conns: make(map[string]IConn)}
+	for _, o := range opts {
+		o(p)
+	}
 	p.start()
 	return p, nil
 }
