@@ -87,7 +87,3 @@ func (c *DataConn) checkState() error {
 func (c *DataConn) BufferedAmount() uint64 {
 	return c.dc.BufferedAmount()
 }
-
-func (c *DataConn) Close() error {
-	return c.dc.Close()
-}
