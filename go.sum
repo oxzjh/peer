@@ -10,8 +10,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
-github.com/oxzjh/rtc v0.2.1 h1:AhsTTM4ZtPEUH9Dup6NYHqX3XdSqZmLQr4tkSbQpUF8=
-github.com/oxzjh/rtc v0.2.1/go.mod h1:3OdhMi/ZCvBNDNGrNMC0wAm4EX8acnYXH5JjSQkiZNI=
+github.com/oxzjh/rtc v0.2.2 h1:0v9CLQ/gsEwoPEyF8uf7Ckudqit9OLzhg0/xm4s7wps=
+github.com/oxzjh/rtc v0.2.2/go.mod h1:3OdhMi/ZCvBNDNGrNMC0wAm4EX8acnYXH5JjSQkiZNI=
 github.com/pion/datachannel v1.5.8 h1:ph1P1NsGkazkjrvyMfhRBUAWMxugJjq2HfQifaOoSNo=
 github.com/pion/datachannel v1.5.8/go.mod h1:PgmdpoaNBLX9HNzNClmdki4DYW5JtI7Yibu8QzbL3tI=
 github.com/pion/dtls/v2 v2.2.7/go.mod h1:8WiMkebSHFD0T+dIU+UeBaoV7kDhOW5oDCzZ7WZ/F9s=

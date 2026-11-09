@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/google/uuid v1.3.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/oxzjh/rtc v0.2.1
+	github.com/oxzjh/rtc v0.2.2
 	github.com/pion/webrtc/v3 v3.3.6
 )
 
