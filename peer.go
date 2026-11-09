@@ -201,10 +201,8 @@ func (p *Peer) newDataConn(uid uint64, sign, id string) (*DataConn, error) {
 	dc := &DataConn{}
 	d, err := rtc.NewData(p.conf, func(candidate *webrtc.ICECandidateInit) {
 		p.sendCandidate(uid, sign, id, candidate)
-	}, dc.onData, rtc.WithOrdered(ConnectOrdered), rtc.WithTimeout(ConnectTimeout), rtc.WithOnTimeout(func() {
-		p.delConn(id)
-	}), rtc.WithOnClosed(func() {
-		dc.closed = true
+	}, dc.onData, rtc.WithOrdered(ConnectOrdered), rtc.WithTimeout(ConnectTimeout), rtc.WithOnClosed(func() {
+		dc.Close()
 		p.delConn(id)
 	}))
 	if err != nil {
@@ -219,9 +217,8 @@ func (p *Peer) newMediaConn(uid uint64, sign, id string) (*MediaConn, error) {
 	mc := &MediaConn{}
 	m, err := rtc.NewMedia(p.conf, func(candidate *webrtc.ICECandidateInit) {
 		p.sendCandidate(uid, sign, id, candidate)
-	}, rtc.WithTimeout(CallTimeout), rtc.WithOnTimeout(func() {
-		p.delConn(id)
-	}), rtc.WithOnClosed(func() {
+	}, rtc.WithTimeout(CallTimeout), rtc.WithOnClosed(func() {
+		mc.Close()
 		p.delConn(id)
 	}))
 	if err != nil {
